@@ -93,7 +93,7 @@ echo "✅ Service Principal Created, Configured, and Credentials Saved to $CREDE
 ```
 ---
 
-Or setup manually  
+## Or setup manually  
 
 ```bash
 az login
@@ -112,8 +112,9 @@ export ARM_CLIENT_SECRET="<password>"
 export ARM_SUBSCRIPTION_ID="<subscription_id>"
 export ARM_TENANT_ID="<tenant_id>"
 ```
+---
 
-### Save the Service Principal into Jenkins Credentials
+## Save the Service Principal into Jenkins Credentials
 Go to Jenkins ➔ Manage Credentials and add:
  - Kind: "Username with password"
  - Username: appId (client ID)

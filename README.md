@@ -1,0 +1,1 @@
+# Automate-Image-Push-to-ACR-Provision-AKS-with-Terraform-and-Deploy-with-ArgoCD-CLI

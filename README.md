@@ -91,7 +91,9 @@ echo "✅ Service Principal Created, Configured, and Credentials Saved to $CREDE
 
 
 ```
+---
 
+Or setup manually  
 
 ```bash
 az login

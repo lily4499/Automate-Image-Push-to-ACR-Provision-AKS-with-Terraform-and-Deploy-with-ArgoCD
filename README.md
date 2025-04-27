@@ -1,1 +1,1 @@
-# Automate-Image-Push-to-ACR-Provision-AKS-with-Terraform-and-Deploy-with-ArgoCD-CLI
+# Deploy AKS Cluster with Terraform + Push Image to ACR + Deploy App using ArgoCD

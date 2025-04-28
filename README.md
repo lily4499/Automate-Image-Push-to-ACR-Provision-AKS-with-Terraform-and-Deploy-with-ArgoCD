@@ -25,6 +25,154 @@ automate-aks-argocd/
 
 ---
 
+## file-setup.py
+
+```python
+import os
+
+# Define the base directory
+base_dir = "/home/lilia/VIDEOS/automate-aks-argocd"
+
+# Define file structures and contents
+files = {
+    "terraform/providers.tf": '''
+provider "azurerm" {
+  features {}
+}
+
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "tfstate"
+    storage_account_name = "<your-storage-account-name>"
+    container_name       = "tfstate"
+    key                  = "terraform.tfstate"
+  }
+}
+''',
+
+    "terraform/main.tf": '''
+resource "azurerm_resource_group" "aks_rg" {
+  name     = var.resource_group_name
+  location = var.location
+}
+
+resource "azurerm_kubernetes_cluster" "aks_cluster" {
+  name                = var.cluster_name
+  location            = azurerm_resource_group.aks_rg.location
+  resource_group_name = azurerm_resource_group.aks_rg.name
+  dns_prefix          = "aksdemo"
+
+  default_node_pool {
+    name       = "default"
+    node_count = 2
+    vm_size    = "Standard_DS2_v2"
+  }
+
+  identity {
+    type = "SystemAssigned"
+  }
+}
+''',
+
+    "terraform/variables.tf": '''
+variable "resource_group_name" {
+  default = "my-rg"
+}
+
+variable "location" {
+  default = "eastus"
+}
+
+variable "cluster_name" {
+  default = "lili-aks"
+}
+''',
+
+    "terraform/outputs.tf": '''
+output "kube_config" {
+  value     = azurerm_kubernetes_cluster.aks_cluster.kube_config_raw
+  sensitive = true
+}
+''',
+
+    "terraform/backend.tf": '''
+terraform {
+  backend "azurerm" {}
+}
+''',
+
+    "scripts/create-remote-backend.sh": '''
+#!/bin/bash
+
+RESOURCE_GROUP_NAME=tfstate
+STORAGE_ACCOUNT_NAME=tfstate$RANDOM
+CONTAINER_NAME=tfstate
+
+# Create Resource Group
+az group create --name $RESOURCE_GROUP_NAME --location eastus
+
+# Create Storage Account
+az storage account create --resource-group $RESOURCE_GROUP_NAME --name $STORAGE_ACCOUNT_NAME --sku Standard_LRS --encryption-services blob
+
+# Create Blob Container
+az storage container create --name $CONTAINER_NAME --account-name $STORAGE_ACCOUNT_NAME
+''',
+
+    "Jenkinsfile": '''
+pipeline {
+    agent any
+    environment {
+        REGISTRY = "<your-acr-name>.azurecr.io"
+        IMAGE_NAME = "nodejs-webapp"
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $REGISTRY/$IMAGE_NAME:latest .'
+            }
+        }
+        stage('Login to ACR') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'acr-sp-credentials', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    sh '''
+                    az login --service-principal -u $USERNAME -p $PASSWORD --tenant <your-tenant-id>
+                    az acr login --name ${REGISTRY%%.azurecr.io}
+                    '''
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                sh 'docker push $REGISTRY/$IMAGE_NAME:latest'
+            }
+        }
+    }
+}
+'''
+}
+
+# Function to create files
+def create_files(base_dir, files):
+    for relative_path, content in files.items():
+        full_path = os.path.join(base_dir, relative_path)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        with open(full_path, 'w') as f:
+            f.write(content)
+        print(f"Created: {full_path}")
+
+# Run the function
+create_files(base_dir, files)
+
+
+```
+
+---
+
 # 🧠 Step-by-Step Guide
 
 ---
@@ -43,58 +191,6 @@ az login
 
 ### Method 2: Service Principal (Good for CI/CD, Jenkins)
 
-## setup-sp.sh
-
-```bash
-#!/bin/bash
-
-# Set variables
-SP_NAME="aks-acr-jenkins-sp"
-ACR_NAME="<your-acr-name>"
-CREDENTIAL_FILE="sp_credentials.txt"
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-
-echo "[*] Creating Service Principal..."
-
-# Create SP with Contributor Role and capture output
-SP_OUTPUT=$(az ad sp create-for-rbac \
-  --name $SP_NAME \
-  --role Contributor \
-  --scopes /subscriptions/$SUBSCRIPTION_ID \
-  --sdk-auth)
-
-# Extract values
-APP_ID=$(echo $SP_OUTPUT | jq -r '.clientId')
-PASSWORD=$(echo $SP_OUTPUT | jq -r '.clientSecret')
-TENANT_ID=$(echo $SP_OUTPUT | jq -r '.tenantId')
-
-# Get ACR Resource ID
-ACR_ID=$(az acr show --name $ACR_NAME --query id --output tsv)
-
-echo "[*] Assigning 'acrpush' role on ACR..."
-
-# Assign acrpush role
-az role assignment create --assignee $APP_ID --role acrpush --scope $ACR_ID
-
-echo "[*] Saving credentials to $CREDENTIAL_FILE..."
-
-# Save credentials into a file
-cat <<EOF > $CREDENTIAL_FILE
-# Service Principal Credentials
-ARM_CLIENT_ID=$APP_ID
-ARM_CLIENT_SECRET=$PASSWORD
-ARM_SUBSCRIPTION_ID=$SUBSCRIPTION_ID
-ARM_TENANT_ID=$TENANT_ID
-EOF
-
-echo "✅ Service Principal Created, Configured, and Credentials Saved to $CREDENTIAL_FILE"
-
-
-```
----
-
-## Or setup manually  
-
 ```bash
 az login
 
@@ -112,18 +208,7 @@ export ARM_CLIENT_SECRET="<password>"
 export ARM_SUBSCRIPTION_ID="<subscription_id>"
 export ARM_TENANT_ID="<tenant_id>"
 ```
----
-
-## Save the Service Principal into Jenkins Credentials
-Go to Jenkins ➔ Manage Credentials and add:
- - Kind: "Username with password"
- - Username: appId (client ID)
- - Password: password (client secret)
- - ID: acr-sp-credentials
- - Description: "Service Principal for ACR login"
-✅ Set ID = acr-sp-credentials  
-(you will use it inside Jenkinsfile)  
-
+✅ Now Terraform will automatically authenticate via this Service Principal.
 ---
 
 ## 2️⃣ Setup Terraform Templates
@@ -303,8 +388,32 @@ Logs into Azure using the Service Principal
 Then logs into ACR  
 Then pushes the image  
 
+You need a Service Principal that has acrpull and acrpush permissions on your Azure Container Registry.  
+## Give Service Principal acrpush on ACR
+
+```bash
+ACR_ID=$(az acr show --name <acr-name> --query id --output tsv)
+az role assignment create \
+  --assignee <appId> \
+  --role acrpush \
+  --scope $ACR_ID
+```
+✅ This makes sure your SP can docker login into ACR properly from Jenkins.
+✅ Jenkins will also login to Azure (via CLI) with this SP inside pipeline.
+
+---
 
 ➡️ Make sure ACR credentials are available to Jenkins.
+
+## Save the Service Principal into Jenkins Credentials
+Go to Jenkins ➔ Manage Credentials and add:
+ - Kind: "Username with password"
+ - Username: appId (client ID)
+ - Password: password (client secret)
+ - ID: acr-sp-credentials
+ - Description: "Service Principal for ACR login"
+✅ Set ID = acr-sp-credentials  
+(you will use it inside Jenkinsfile)  
 
 ---
 

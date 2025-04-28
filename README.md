@@ -10,7 +10,6 @@
 
 ---
 ```markdown
----
 
 ## 📂 Project Structure
 ```bash

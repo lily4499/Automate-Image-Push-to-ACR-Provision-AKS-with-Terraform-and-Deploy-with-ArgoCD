@@ -1,5 +1,5 @@
 
-```markdown
+
 # 🚀 Automate Image Push to ACR, Provision AKS with Terraform, and Deploy with ArgoCD CLI
 
 ---
@@ -9,7 +9,7 @@
 > **A growing SaaS startup specializing in task management solutions needed a fully automated, scalable, and secure infrastructure to deploy their Node.js web application. To achieve this, we provisioned an Azure Kubernetes Service (AKS) cluster and Azure Container Registry (ACR) using Terraform for infrastructure as code. Jenkins was integrated to automate the build and push of Docker images to ACR, while ArgoCD was implemented to enable GitOps-based continuous deployment to AKS, directly syncing from the application’s GitHub repository. This architecture allowed the company to ship new features faster, achieve zero-downtime deployments, and scale seamlessly as their user base expanded from a few hundred to several thousand users globally — without changing the underlying deployment process.
 
 ---
-
+```markdown
 ---
 
 ## 📂 Project Structure
